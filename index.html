@@ -1,0 +1,419 @@
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Induction Machine Simulation</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/p5@2.2.2/lib/p5.min.js"></script>
+  <link rel="stylesheet" href="styles.css">
+</head>
+
+<body class="mode-grid">
+
+  <header class="top-bar">
+    <h1 class="title">Induction Machine</h1>
+    <div class="tabs">
+      <button class="tab-btn active" data-target="grid" onclick="switchTab('grid')">Grid-Connected Motor / Generator</button>
+      <button class="tab-btn" data-target="standalone" onclick="switchTab('standalone')">Standalone Generator</button>
+    </div>
+  </header>
+
+  <main class="main-content">
+    <button class="floating-toggle left" id="toggle-in-btn" onclick="togglePanel('input-panel')"><i
+        class="fas fa-sliders-h"></i> Parameters</button>
+    <button class="floating-toggle right" id="toggle-out-btn" onclick="togglePanel('result-panel')"><i
+        class="fas fa-chart-line"></i> Results</button>
+
+    <aside class="panel left-panel" id="input-panel">
+      <div class="panel-header">
+        <h2>Parameters</h2>
+        <button class="toggle-btn" onclick="togglePanel('input-panel')"><i class="fas fa-chevron-left"></i></button>
+      </div>
+      <div class="panel-content" id="controls-ui">
+      </div>
+      <p class="mode-standalone" style="padding:0 20px 20px; font-size:0.8rem; font-style:italic;">The ohmic values of
+        reactances should be measured at base frequency.</p>
+    </aside>
+
+    <section class="canvas-area">
+      <div id="motor-container" class="canvas-box active-canvas"></div>
+      <div id="gen-container" class="canvas-box"></div>
+    </section>
+
+    <!-- Dynamic Bottom theory & schematic panel -->
+    <section class="bottom-panel" id="theory-panel">
+      <div class="panel-header" onclick="toggleTheoryPanel()">
+        <h2><i class="fas fa-project-diagram"></i> Circuit Schematic & Field Guide</h2>
+        <span id="theory-toggle-icon"><i class="fas fa-chevron-up"></i></span>
+      </div>
+      <div class="bottom-panel-content">
+        <div class="schematic-box" id="schematic-container">
+          <!-- Default Motor Schematic SVG -->
+        </div>
+        <div class="theory-description">
+          <h3 id="theory-title">Grid Motor Theory</h3>
+          <div class="legend-list" id="theory-legends">
+            <!-- Loaded dynamically via switchTab -->
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <aside class="panel right-panel" id="result-panel">
+      <div class="panel-header">
+        <button class="toggle-btn" onclick="togglePanel('result-panel')"><i class="fas fa-chevron-right"></i></button>
+        <h2>Results</h2>
+      </div>
+      <div class="panel-content" id="results-ui">
+        <div id="grid-results" class="result-group active-results">
+          <div class="result-item"><label>Stator Current</label><span id="res-stator-current">0.00</span> A
+          </div>
+          <div class="result-item"><label>Induced Torque</label><span id="induced-torque">0.00</span> Nm
+          </div>
+          <div class="result-item"><label>Starting Torque</label><span id="starting-torque">0.00</span>
+            Nm</div>
+        </div>
+        <div id="standalone-results" class="result-group">
+          <div class="result-item"><label>Generated Frequency (f)</label><span id="res-gen-f">0.00</span> Hz
+          </div>
+          <div class="result-item"><label>Required Mag. Reactance (Xm)</label><span id="res-gen-xm">0.00</span> &Omega;
+          </div>
+          <div class="result-item"><label>Generated Voltage</label><span id="res-gen-stator"
+              style="font-weight: normal; font-size: 0.9rem;">For finding the generated voltage, we need magnetization
+              curve
+              of the generator. The voltage of the point of the curve where slope is multiplicative
+              inverse of the required Xm is the voltage generated.</span></div>
+          <div class="result-item" style="display: none;" id="error"><span
+              style="font-weight: normal; font-size:0.9rem; color: #E11845;">The capacitors are not enough
+              for supplying the lagging current required by the rest of the circuit and that's why
+              magnetizing branch now also needs to be capacitive. So the generator is actually not
+              working, the visualization is just for comprehension.</span></div>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <script>
+    // Predefined schematic vector structures
+    const MOTOR_SCHEMATIC = `
+        <svg viewBox="0 0 450 180" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+    <!-- Definitions for markers (arrowheads) -->
+    <defs>
+        <marker id="arrow-red" markerWidth="6" markerHeight="6" refX="4" refY="3" orient="auto">
+            <path d="M0,1 L6,3 L0,5 z" fill="#ff0000" />
+        </marker>
+        <marker id="arrow-green" markerWidth="6" markerHeight="6" refX="4" refY="3" orient="auto">
+            <path d="M0,1 L6,3 L0,5 z" fill="#009900" />
+        </marker>
+        <marker id="arrow-blue" markerWidth="6" markerHeight="6" refX="4" refY="3" orient="auto">
+            <path d="M0,1 L6,3 L0,5 z" fill="#0000ff" />
+        </marker>
+        <marker id="arrow-magenta" markerWidth="6" markerHeight="6" refX="4" refY="3" orient="auto">
+            <path d="M0,1 L6,3 L0,5 z" fill="#ff00ff" />
+        </marker>
+    </defs>
+
+    <!-- Stator (Primary) Circuit -->
+    <circle cx="20" cy="50" r="3.5" fill="#fff" stroke="#000" stroke-width="2"/>
+    <circle cx="20" cy="150" r="3.5" fill="#fff" stroke="#000" stroke-width="2"/>
+    <text x="10" y="105" font-family="sans-serif" font-size="16" font-weight="bold">
+        <tspan font-style="italic">V</tspan><tspan baseline-shift="sub" font-size="11">in</tspan>
+    </text>
+    <path d="M 23.5 50 L 50 50" fill="none" stroke="#000" stroke-width="2"/>
+    <path d="M 50 50 L 55 40 L 65 60 L 75 40 L 85 60 L 90 50 L 100 50" fill="none" stroke="#000" stroke-width="2"/>
+    <path d="M 100 50 C 105 35, 115 35, 115 50 C 115 35, 125 35, 125 50 C 125 35, 135 35, 135 50 C 135 35, 145 35, 145 50 L 170 50" fill="none" stroke="#000" stroke-width="2"/>
+    
+    <text x="65" y="30" font-family="sans-serif" font-size="14" font-weight="bold">
+        <tspan font-style="italic">R</tspan><tspan baseline-shift="sub" font-size="10">1</tspan>
+    </text>
+    <text x="115" y="30" font-family="sans-serif" font-size="14" font-weight="bold">
+        <tspan font-style="italic">jX</tspan><tspan baseline-shift="sub" font-size="10">1</tspan>
+    </text>
+
+    <!-- Parallel Branch (Rc || jXm) -->
+    <circle cx="170" cy="50" r="3" fill="#000" />
+    <path d="M 170 50 L 170 60 L 140 60 L 140 75" fill="none" stroke="#000" stroke-width="2"/>
+    <path d="M 170 60 L 200 60 L 200 75" fill="none" stroke="#000" stroke-width="2"/>
+    <path d="M 140 75 L 130 82.5 L 150 97.5 L 130 112.5 L 140 120 L 140 140" fill="none" stroke="#000" stroke-width="2"/>
+    <path d="M 200 75 C 180 80, 180 90, 200 90 C 180 95, 180 105, 200 105 C 180 110, 180 120, 200 120 L 200 140" fill="none" stroke="#000" stroke-width="2"/>
+    
+    <text x="110" y="105" font-family="sans-serif" font-size="14" font-weight="bold">
+        <tspan font-style="italic">R</tspan><tspan baseline-shift="sub" font-size="10">c</tspan>
+    </text>
+    <text x="210" y="105" font-family="sans-serif" font-size="14" font-weight="bold">
+        <tspan font-style="italic">jX</tspan><tspan baseline-shift="sub" font-size="10">m</tspan>
+    </text>
+
+    <path d="M 140 140 L 200 140" fill="none" stroke="#000" stroke-width="2"/>
+    <path d="M 170 140 L 170 150" fill="none" stroke="#000" stroke-width="2"/>
+    <circle cx="170" cy="150" r="3" fill="#000" />
+
+    <path d="M 170 50 L 240 50 L 240 70" fill="none" stroke="#000" stroke-width="2"/>
+    <path d="M 23.5 150 L 240 150 L 240 130" fill="none" stroke="#000" stroke-width="2"/>
+
+    <path d="M 240 70 C 225 75, 225 85, 240 90 C 225 95, 225 105, 240 110 C 225 115, 225 125, 240 130" fill="none" stroke="#000" stroke-width="2"/>
+    <circle cx="234" cy="60" r="2" fill="#000" />
+    <path d="M 247 65 L 247 135" fill="none" stroke="#000" stroke-width="1.5"/>
+    <path d="M 253 65 L 253 135" fill="none" stroke="#000" stroke-width="1.5"/>
+
+    <path d="M 260 70 C 275 75, 275 85, 260 90 C 275 95, 275 105, 260 110 C 275 115, 275 125, 260 130" fill="none" stroke="#000" stroke-width="2"/>
+    <circle cx="266" cy="60" r="2" fill="#000" />
+
+    <path d="M 260 50 L 260 70" fill="none" stroke="#000" stroke-width="2"/>
+    <path d="M 260 150 L 260 130" fill="none" stroke="#000" stroke-width="2"/>
+    <path d="M 260 50 L 290 50" fill="none" stroke="#000" stroke-width="2"/>
+    
+    <path d="M 290 50 C 295 35, 305 35, 305 50 C 305 35, 315 35, 315 50 C 315 35, 325 35, 325 50 L 340 50" fill="none" stroke="#000" stroke-width="2"/>
+    <path d="M 340 50 L 345 40 L 355 60 L 365 40 L 375 60 L 380 50 L 410 50" fill="none" stroke="#000" stroke-width="2"/>
+    <path d="M 410 50 L 410 150 L 260 150" fill="none" stroke="#000" stroke-width="2"/>
+
+    <text x="303" y="30" font-family="sans-serif" font-size="14" font-weight="bold">
+        <tspan font-style="italic">jsX</tspan><tspan baseline-shift="sub" font-size="10">R</tspan>
+    </text>
+    <text x="360" y="30" font-family="sans-serif" font-size="14" font-weight="bold">
+        <tspan font-style="italic">R</tspan><tspan baseline-shift="sub" font-size="10">R</tspan>
+    </text>
+
+    <!-- CURRENT FLOW ARROWS -->
+    <path d="M 32 38 L 48 38" fill="none" stroke="#ff0000" stroke-width="2" marker-end="url(#arrow-red)"/>
+    <text x="36" y="32" font-family="sans-serif" font-size="12" fill="#ff0000" font-weight="bold">
+        <tspan font-style="italic">I</tspan><tspan baseline-shift="sub" font-size="9">s</tspan>
+    </text>
+    <path d="M 195 38 L 220 38" fill="none" stroke="#0000ff" stroke-width="2" marker-end="url(#arrow-blue)"/>
+    <text x="204" y="32" font-family="sans-serif" font-size="12" fill="#0000ff" font-weight="bold">
+        <tspan font-style="italic">I</tspan><tspan baseline-shift="sub" font-size="9">l</tspan>
+    </text>
+    <path d="M 200 58 L 200 70" fill="none" stroke="#009900" stroke-width="2" marker-end="url(#arrow-green)"/>
+    <text x="206" y="66" font-family="sans-serif" font-size="12" fill="#009900" font-weight="bold">
+        <tspan font-style="italic">I</tspan><tspan baseline-shift="sub" font-size="9">m</tspan>
+    </text>
+    <path d="M 265 38 L 285 38" fill="none" stroke="#ff00ff" stroke-width="2" marker-end="url(#arrow-magenta)"/>
+    <text x="270" y="32" font-family="sans-serif" font-size="12" fill="#ff00ff" font-weight="bold">
+        <tspan font-style="italic">I</tspan><tspan baseline-shift="sub" font-size="9">r</tspan>
+    </text>
+</svg>`;
+
+    const GEN_SCHEMATIC = `
+        <svg viewBox="0 0 550 210" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+    <!-- Definitions for markers (arrowheads) -->
+    <defs>
+        <marker id="arrow-red" markerWidth="6" markerHeight="6" refX="4" refY="3" orient="auto">
+            <path d="M0,1 L6,3 L0,5 z" fill="#ff0000" />
+        </marker>
+        <marker id="arrow-green" markerWidth="6" markerHeight="6" refX="4" refY="3" orient="auto">
+            <path d="M0,1 L6,3 L0,5 z" fill="#009900" />
+        </marker>
+        <marker id="arrow-blue" markerWidth="6" markerHeight="6" refX="4" refY="3" orient="auto">
+            <path d="M0,1 L6,3 L0,5 z" fill="#0000ff" />
+        </marker>
+        <marker id="arrow-magenta" markerWidth="6" markerHeight="6" refX="4" refY="3" orient="auto">
+            <path d="M0,1 L6,3 L0,5 z" fill="#ff00ff" />
+        </marker>
+    </defs>
+
+    <!-- Stator (Primary) Circuit -->
+    <circle cx="20" cy="50" r="3.5" fill="#fff" stroke="#000" stroke-width="2"/>
+    <circle cx="20" cy="150" r="3.5" fill="#fff" stroke="#000" stroke-width="2"/>
+    <text x="5" y="105" font-family="sans-serif" font-size="16" font-weight="bold">
+        <tspan font-style="italic">V</tspan><tspan baseline-shift="sub" font-size="11">in</tspan>
+    </text>
+
+    <path d="M 23.5 50 L 80 50" fill="none" stroke="#000" stroke-width="2"/>
+    <path d="M 23.5 150 L 80 150" fill="none" stroke="#000" stroke-width="2"/>
+    <circle cx="80" cy="50" r="3" fill="#000" />
+    <circle cx="80" cy="150" r="3" fill="#000" />
+
+    <path d="M 80 50 L 80 60" fill="none" stroke="#000" stroke-width="2"/>
+    <path d="M 80 60 C 60 65, 60 75, 80 75 C 60 80, 60 90, 80 90" fill="none" stroke="#000" stroke-width="2"/>
+    <path d="M 80 90 L 80 105" fill="none" stroke="#000" stroke-width="2"/>
+    <path d="M 80 105 L 70 112.5 L 90 120 L 70 127.5 L 80 135" fill="none" stroke="#000" stroke-width="2"/>
+    <path d="M 80 135 L 80 150" fill="none" stroke="#000" stroke-width="2"/>
+
+    <text x="45" y="80" font-family="sans-serif" font-size="14" font-weight="bold">
+        <tspan font-style="italic">jX</tspan><tspan baseline-shift="sub" font-size="10">L</tspan>
+    </text>
+    <text x="50" y="125" font-family="sans-serif" font-size="14" font-weight="bold">
+        <tspan font-style="italic">R</tspan><tspan baseline-shift="sub" font-size="10">L</tspan>
+    </text>
+
+    <path d="M 80 50 L 160 50" fill="none" stroke="#000" stroke-width="2"/>
+    <circle cx="120" cy="50" r="3" fill="#000" />
+    <circle cx="120" cy="150" r="3" fill="#000" />
+
+    <path d="M 120 50 L 120 95" fill="none" stroke="#000" stroke-width="2"/>
+    <path d="M 110 95 L 130 95" fill="none" stroke="#000" stroke-width="2"/>
+    <path d="M 110 105 L 130 105" fill="none" stroke="#000" stroke-width="2"/>
+    <path d="M 120 105 L 120 150" fill="none" stroke="#000" stroke-width="2"/>
+    <text x="135" y="105" font-family="sans-serif" font-size="14" font-weight="bold">
+        <tspan font-style="italic">X</tspan><tspan baseline-shift="sub" font-size="10">c</tspan>
+    </text>
+
+    <path d="M 160 50 L 165 40 L 175 60 L 185 40 L 195 60 L 200 50" fill="none" stroke="#000" stroke-width="2"/>
+    <path d="M 200 50 C 205 35, 215 35, 215 50 C 215 35, 225 35, 225 50 C 225 35, 235 35, 235 50 L 245 50" fill="none" stroke="#000" stroke-width="2"/>
+    
+    <text x="175" y="30" font-family="sans-serif" font-size="14" font-weight="bold">
+        <tspan font-style="italic">R</tspan><tspan baseline-shift="sub" font-size="10">1</tspan>
+    </text>
+    <text x="215" y="30" font-family="sans-serif" font-size="14" font-weight="bold">
+        <tspan font-style="italic">jX</tspan><tspan baseline-shift="sub" font-size="10">1</tspan>
+    </text>
+
+    <path d="M 245 50 L 300 50" fill="none" stroke="#000" stroke-width="2"/>
+    <circle cx="300" cy="50" r="3" fill="#000" />
+    <circle cx="300" cy="150" r="3" fill="#000" />
+
+    <path d="M 300 50 L 300 60" fill="none" stroke="#000" stroke-width="2"/>
+    <path d="M 270 60 L 330 60" fill="none" stroke="#000" stroke-width="2"/>
+    <path d="M 270 60 L 270 75" fill="none" stroke="#000" stroke-width="2"/>
+    <path d="M 270 75 C 250 80, 250 90, 270 90 C 250 95, 250 105, 270 105 C 250 110, 250 120, 270 120 L 270 140" fill="none" stroke="#000" stroke-width="2"/>
+    <text x="230" y="105" font-family="sans-serif" font-size="14" font-weight="bold">
+        <tspan font-style="italic">jX</tspan><tspan baseline-shift="sub" font-size="10">m</tspan>
+    </text>
+    <path d="M 330 60 L 330 75" fill="none" stroke="#000" stroke-width="2"/>
+    <path d="M 330 75 L 320 82.5 L 340 97.5 L 320 112.5 L 330 120 L 330 140" fill="none" stroke="#000" stroke-width="2"/>
+    <text x="340" y="105" font-family="sans-serif" font-size="14" font-weight="bold">
+        <tspan font-style="italic">R</tspan><tspan baseline-shift="sub" font-size="10">c</tspan>
+    </text>
+
+    <path d="M 270 140 L 330 140" fill="none" stroke="#000" stroke-width="2"/>
+    <path d="M 300 140 L 300 150" fill="none" stroke="#000" stroke-width="2"/>
+    <path d="M 300 50 L 380 50 L 380 70" fill="none" stroke="#000" stroke-width="2"/>
+    <path d="M 80 150 L 380 150 L 380 130" fill="none" stroke="#000" stroke-width="2"/>
+    <path d="M 380 70 C 365 75, 365 85, 380 90 C 365 95, 365 105, 380 110 C 365 115, 365 125, 380 130" fill="none" stroke="#000" stroke-width="2"/>
+    <circle cx="374" cy="60" r="2" fill="#000" />
+    <path d="M 387 65 L 387 135" fill="none" stroke="#000" stroke-width="1.5"/>
+    <path d="M 393 65 L 393 135" fill="none" stroke="#000" stroke-width="1.5"/>
+    <path d="M 400 70 C 415 75, 415 85, 400 90 C 415 95, 415 105, 400 110 C 415 115, 415 125, 400 130" fill="none" stroke="#000" stroke-width="2"/>
+    <circle cx="406" cy="60" r="2" fill="#000" />
+    <path d="M 400 70 L 400 50 L 430 50" fill="none" stroke="#000" stroke-width="2"/>
+    <path d="M 430 50 C 435 35, 445 35, 445 50 C 445 35, 455 35, 455 50 C 455 35, 465 35, 465 50 L 480 50" fill="none" stroke="#000" stroke-width="2"/>
+    <text x="435" y="30" font-family="sans-serif" font-size="14" font-weight="bold">
+        <tspan font-style="italic">jsX</tspan><tspan baseline-shift="sub" font-size="10">R</tspan>
+    </text>
+    <path d="M 480 50 L 480 150" fill="none" stroke="#000" stroke-width="2"/>
+    <path d="M 400 130 L 400 150 L 430 150" fill="none" stroke="#000" stroke-width="2"/>
+    <path d="M 430 150 L 435 140 L 445 160 L 455 140 L 465 160 L 470 150 L 480 150" fill="none" stroke="#000" stroke-width="2"/>
+    <text x="445" y="180" font-family="sans-serif" font-size="14" font-weight="bold">
+        <tspan font-style="italic">R</tspan><tspan baseline-shift="sub" font-size="10">R</tspan>
+    </text>
+
+    <!-- CURRENT FLOW ARROWS -->
+    <path d="M 255 38 L 275 38" fill="none" stroke="#ff0000" stroke-width="2" marker-end="url(#arrow-red)"/>
+    <text x="260" y="32" font-family="sans-serif" font-size="12" fill="#ff0000" font-weight="bold">
+        <tspan font-style="italic">I</tspan><tspan baseline-shift="sub" font-size="9">s</tspan>
+    </text>
+    <path d="M 270 62 L 270 72" fill="none" stroke="#009900" stroke-width="2" marker-end="url(#arrow-green)"/>
+    <text x="276" y="70" font-family="sans-serif" font-size="12" fill="#009900" font-weight="bold">
+        <tspan font-style="italic">I</tspan><tspan baseline-shift="sub" font-size="9">m</tspan>
+    </text>
+    <path d="M 330 38 L 350 38" fill="none" stroke="#0000ff" stroke-width="2" marker-end="url(#arrow-blue)"/>
+    <text x="336" y="32" font-family="sans-serif" font-size="12" fill="#0000ff" font-weight="bold">
+        <tspan font-style="italic">I</tspan><tspan baseline-shift="sub" font-size="9">l</tspan>
+    </text>
+    <path d="M 490 90 L 490 110" fill="none" stroke="#ff00ff" stroke-width="2" marker-end="url(#arrow-magenta)"/>
+    <text x="496" y="105" font-family="sans-serif" font-size="12" fill="#ff00ff" font-weight="bold">
+        <tspan font-style="italic">I</tspan><tspan baseline-shift="sub" font-size="9">r</tspan>
+    </text>
+</svg>`;
+
+    const MOTOR_LEGENDS = `
+        <div class="legend-card">
+            <span class="badge badge-s">Bs [Red]</span>
+            <strong>Stator Field Vector:</strong> Generated directly by stator current <span class="formula">Is</span>. Sets up the main rotating flux sweep in stator windings.
+        </div>
+        <div class="legend-card">
+            <span class="badge badge-m">Bm [Green]</span>
+            <strong>Magnetizing Field:</strong> Generated by mutual magnetization current <span class="formula">Im</span> running across the mutual air-gap reactance <span class="formula">Xm</span>.
+        </div>
+        <div class="legend-card">
+            <span class="badge badge-r">Br [Magenta]</span>
+            <strong>Rotor Field Vector:</strong> Created by induced current <span class="formula">Ir</span> flowing in rotor bars. Constantly reacts to the slip speed frequency.
+        </div>
+        <div class="legend-card">
+            <span class="badge badge-l">Bl [Blue]</span>
+            <strong>Load Field Vector:</strong> Caused by load current <span class="formula">Il</span> balancing mutual energy exchange across core bounds.
+        </div>`;
+
+    const GEN_LEGENDS = `
+        <div class="legend-card">
+            <span class="badge badge-s">Bs [Red]</span>
+            <strong>Stator Field Vector:</strong> Produced by the collective stator current <span class="formula">Is</span> as it feeds energy back to excitation capacitor and loads.
+        </div>
+        <div class="legend-card">
+            <span class="badge badge-m">Bm [Green]</span>
+            <strong>Mutual Magnetizing Field:</strong> Sustained via magnetization current <span class="formula">Im</span>, enabling generator self-excitation through capacitor terminal resonance.
+        </div>
+        <div class="legend-card">
+            <span class="badge badge-r">Br [Magenta]</span>
+            <strong>Rotor Field Vector:</strong> Created by induced current <span class="formula">Ir</span> flowing in rotor bars. Constantly reacts to the slip speed frequency.
+        </div>
+        <div class="legend-card">
+            <span class="badge badge-l">Bl [Blue]</span>
+            <strong>Load Field Vector:</strong> Created by load current <span class="formula">Il</span> flowing through the stator windings.
+        </div>`;
+
+    function populateGuide(mode) {
+      const container = document.getElementById('schematic-container');
+      const title = document.getElementById('theory-title');
+      const legends = document.getElementById('theory-legends');
+
+      if (mode === 'grid') {
+        container.innerHTML = MOTOR_SCHEMATIC;
+        title.innerText = "Grid Connected Motor Equivalent Circuit";
+        legends.innerHTML = MOTOR_LEGENDS;
+      } else {
+        container.innerHTML = GEN_SCHEMATIC;
+        title.innerText = "Standalone Self-Excited Generator Circuit";
+        legends.innerHTML = GEN_LEGENDS;
+      }
+    }
+
+    // Simple UI Interaction Logic
+    function togglePanel(id) {
+      document.getElementById(id).classList.toggle('collapsed');
+      document.body.classList.toggle(`${id}-collapsed`);
+    }
+
+    function toggleTheoryPanel() {
+      const panel = document.getElementById('theory-panel');
+      const icon = document.getElementById('theory-toggle-icon');
+      panel.classList.toggle('collapsed');
+      if (panel.classList.contains('collapsed')) {
+        icon.innerHTML = '<i class="fas fa-chevron-up"></i>';
+      } else {
+        icon.innerHTML = '<i class="fas fa-chevron-down"></i>';
+      }
+    }
+
+    function switchTab(mode) {
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.target === mode);
+      });
+      document.body.classList.remove('mode-grid', 'mode-standalone');
+      document.body.classList.add(`mode-${mode}`);
+      document.getElementById('motor-container').classList.toggle('active-canvas', mode === 'grid');
+      document.getElementById('gen-container').classList.toggle('active-canvas', mode === 'standalone');
+      document.getElementById('grid-results').classList.toggle('active-results', mode === 'grid');
+      document.getElementById('standalone-results').classList.toggle('active-results', mode === 'standalone');
+      populateGuide(mode);
+    }
+
+    // Initialize default UI settings
+    window.addEventListener('DOMContentLoaded', () => {
+      populateGuide('grid');
+
+      // Auto collapse panels on mobile for better initial view
+      if (window.innerWidth <= 1024) {
+        document.getElementById('input-panel').classList.add('collapsed');
+        document.body.classList.add('input-panel-collapsed');
+        document.getElementById('result-panel').classList.add('collapsed');
+        document.body.classList.add('result-panel-collapsed');
+      }
+    });
+  </script>
+
+  <script type="module" src="sketch.js"></script>
+</body>
+
+</html>
