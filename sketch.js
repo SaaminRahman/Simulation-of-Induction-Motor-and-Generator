@@ -699,11 +699,12 @@ import Complex from 'https://esm.sh/complex.js';
         if (XmBase < 0) {
           if (document.body.classList.contains('mode-standalone')) {
             document.getElementById('error').style.display = 'block';
+            p.textSize(14);
+            p.fill(255, 0, 0);
+            p.stroke(255);
+            p.text("The generator is not working! See results for explanation", p.width/2 - 170, 30);
           }
-          p.textSize(14);
-          p.fill(255, 0, 0);
-          p.stroke(255);
-          p.text("The generator is not working! See results for explanation", p.width/2 - 170, 30);
+          
         } else {
           if (document.body.classList.contains('mode-standalone')) {
             document.getElementById('error').style.display = 'none';
