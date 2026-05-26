@@ -38,13 +38,13 @@ import Complex from 'https://esm.sh/complex.js';
       p.textAlign(p.LEFT, p.CENTER);
       p.noStroke();
       p.fill(0);
-      p.text("MAGNETIC FIELD VECTORS", 25, p.height - 40);
+      p.text("MAGNETIC FIELD VECTORS", 25, p.height - 45);
       p.stroke(0);
       p.strokeWeight(1);
       p.fill(255, 0, 0); p.rect(25, p.height - 30 , 14, 10); p.noStroke(); p.fill(0); p.text("Bs : Stator Field", 48, p.height - 25);
       p.stroke(0); p.fill(0, 200, 0); p.rect(150, p.height - 30, 14, 10); p.noStroke(); p.fill(0); p.text("Bm : Magnetizing Field", 170, p.height - 25);
-      p.stroke(0); p.fill(0, 0, 255); p.rect(310, p.height - 30, 14, 10); p.noStroke(); p.fill(0); p.text("Bl : Load Field", 330, p.height - 25);
-      p.stroke(0); p.fill(255, 0, 255); p.rect(430, p.height - 30, 14, 10); p.noStroke(); p.fill(0); p.text("Br : Rotor Field", 450, p.height - 25);
+      p.stroke(0); p.fill(0, 0, 255); p.rect(25, p.height - 15, 14, 10); p.noStroke(); p.fill(0); p.text("Bl : Load Field", 48, p.height - 10);
+      p.stroke(0); p.fill(255, 0, 255); p.rect(150, p.height - 15, 14, 10); p.noStroke(); p.fill(0); p.text("Br : Rotor Field",170, p.height - 10);
       p.pop();
     }
 
