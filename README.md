@@ -1,4 +1,4 @@
-# Induction Machine Simulation Logic
+
 
 This document explains the mathematical and physical logic behind the induction machine simulation provided in the `sketch.js` file. It breaks down how currents, magnetic fields, operating frequency, and magnetizing reactance are calculated for both grid-connected (motor) and standalone (generator) modes.
 
@@ -8,7 +8,7 @@ This document explains the mathematical and physical logic behind the induction 
 
 ### a. Grid-Connected Motor / Generator
 In grid-connected mode, the simulation models the motor using the standard per-phase equivalent circuit of an induction machine. A fixed voltage (`Vin`) and grid frequency are applied. 
-
+![Motor circuit](assets/motor-equivalent-circuit.jpg)
 The process is as follows:
 1. **Define Impedances:**
    * Rotor Impedance: $Z_{R2,X2} = \frac{R_2}{s} + jX_2$ (where $s$ is slip)
@@ -21,7 +21,7 @@ The process is as follows:
 
 ### b. Standalone Generator
 In standalone mode, the machine operates as a self-excited induction generator (SEIG). There is no external voltage source; excitation is provided by a capacitor bank, and the machine builds up voltage from residual magnetism.
-
+![Generator Circuit](assets/SEIG-circuit.png)
 The process of calculating the currents are as follows:
 1. **Frequency Scaling:** All reactive components ($X_1, X_2, X_c, X_L, X_m$) are scaled by the operating frequency ratio: $\frac{f}{f_{base}}$ (Finding the frequency of stator circuit is discussed later).
 2. **Current Phases/Magnitudes:**
@@ -53,11 +53,11 @@ The rotor is modeled as a squirrel cage with a discrete number of bars (`numRoto
 * The total **Rotor Field ($B_r$)** is the vector sum of the magnetic fields produced by all individual rotor bars.
 
 ---
-## 3. Frequency Calculation for Standalone Mode
+## 3. Frequency Calculation for Standalone Generator Mode
 
 The operating frequency ($f$) in standalone mode is not fixed by a grid; it is determined by the real power balance of the system. The mechanical power provided by the prime mover (at speed corresponding to $f_i$) must balance the electrical losses and the load.
 
-To find the the equation we can solve to find the frequency, we use the fact that the sum of currents entering and exiting node A in generator circuit must be zero. If the voltage of node A is $V$, then $V \sum Y = 0$ where $Y$ are the impedances of the branches connected to node A. So we can say $\sum Y = 0$ and so $Re(Y) = 0$
+To find the the equation we can solve to find the frequency, we use the fact that the sum of currents entering and exiting node A, in generator circuit drawn above, must be zero. If the voltage of node A is $V$, then $V \sum Y = 0$ where $Y$ are the impedances of the branches connected to node A. So we can say $\sum Y = 0$ and so $Re(Y) = 0$
 
 The `solveForF` function determines this frequency using the **Bisection Method**:
 1. **Objective:** Find the frequency $f$ where the **real part of the total admittance**  $Re(Y)$  is exactly zero. 
@@ -67,7 +67,7 @@ The `solveForF` function determines this frequency using the **Bisection Method*
    * It repeatedly halves the interval (up to 40 iterations), checking whether the zero-crossing of the real admittance lies in the lower or upper half.
    * It narrows down on the exact frequency $f$ where $Re(Y) = 0$ and returns it. If the function cannot find a zero-crossing, it returns `null`, indicating that the generator failed to self-excite.
   
-## 4. $X_m$ Calculation for Standalone Mode
+## 4. $X_m$ Calculation for Standalone Generator Mode
 
 Just like solving $Re(Y) = 0$ we got the frequency, solving $Im(Y) = 0$ gives us the required value of Xm for overall balance.
 
