@@ -78,6 +78,6 @@ The `solveForXm` function calculates this required saturated value:
 4. It sets $X_m$ such that $\frac{-1}{X_m} = - (Y_{stator\_side\_imag} + Y_{rotor\_imag})$, resulting in the code's formula: 
    $$X_m = \frac{1}{Y_{stator\_side\_imag} + Y_{rotor\_imag}}$$
 
-This value of Xm can be used to find the voltage of node A and hence the generated voltage also. In the magnetization curve of the generator with voltage on y axis and current on x axis, the of node A is the voltage of the point where the slope is equal to the Xm. The graph must be drawn using data collected at the frequency found out earlier.
+This value of Xm can be used to find the voltage of node A and hence the generated voltage also. In the magnetization curve of the generator (drawn using the data collected at the stator frequency found earlier) the voltage of the point in the curve where the ratio of voltage and current is Xm, is the voltage at node A.
 
 
